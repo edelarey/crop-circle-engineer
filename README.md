@@ -1,5 +1,5 @@
 ```markdown
-# CropBaudo
+# Crop-Circle-Engineer
 
 **Reverse-engineer crop circles into working 3D energy-generating devices**  
 *Based on the principles of Italian inventor Umberto Baudo*
@@ -12,7 +12,7 @@ Turn any aerial photograph of a crop circle into a precise mechanical 3D model �
 
 Crop circles are not random art. Following Umberto Baudo’s groundbreaking work (2008–2019), this application treats authentic formations as **technical blueprints** for free-energy devices powered by centrifugal force, eccentric nuclei, and oscillating spring systems.
 
-CropBaudo automatically:
+Crop-Circle-Engineer automatically:
 - Detects every circle, spiral, and offset using computer vision
 - Maps geometry to Baudo’s mechanical components
 - Generates interactive 2D diagrams and physics-enabled 3D models
@@ -36,8 +36,8 @@ CropBaudo automatically:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/YOUR-USERNAME/cropbaudo.git
-cd cropbaudo
+git clone https://github.com/YOUR-USERNAME/Crop-Circle-Engineer.git
+cd Crop-Circle-Engineer
 
 # 2. Create virtual environment
 python -m venv venv
@@ -86,7 +86,7 @@ streamlit run main.py
 ## 📁 Project Structure
 
 ```
-cropbaudo/
+Crop-Circle-Engineer/
 ├── main.py                 # Streamlit entry point
 ├── config.py               # Baudo constants & tuning parameters
 ├── modules/
