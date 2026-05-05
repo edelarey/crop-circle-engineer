@@ -89,3 +89,48 @@ def glb_download_button(
         file_name="model.glb",
         mime="model/gltf-binary",
     )
+
+
+def overlay_baudo_labels(annotated_bgr: Any, baudo_params: dict) -> Any:
+    """
+    Overlay Baudo parameter labels onto an annotated BGR image.
+
+    Accepts the OpenCV BGR ndarray and baudo_params dict. Returns a copy
+    of the image with white text labels (black shadow for readability)
+    describing key assembly parameters.
+    """
+    img = annotated_bgr.copy()
+
+    labels = [
+        f"Circles: {len(baudo_params.get('circles', []))}",
+        f"Rotor discs: {len(baudo_params.get('rotor_discs', []))}",
+        f"Spring k: {baudo_params.get('spring_k', 'N/A')} N/m",
+    ]
+
+    # Guard natural_frequency_hz against None / non-numeric
+    nat_freq = baudo_params.get("natural_frequency_hz", None)
+    if nat_freq is not None:
+        try:
+            labels.append(f"Nat. freq: {float(nat_freq):.2f} Hz")
+        except (TypeError, ValueError):
+            labels.append("Nat. freq: N/A Hz")
+    else:
+        labels.append("Nat. freq: N/A Hz")
+
+    labels.append(f"Pred. energy: {baudo_params.get('predicted_energy_J', 'N/A')} J")
+
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    scale = 0.5
+    thickness = 1
+    line_type = cv2.LINE_AA
+    line_height = 22
+    x = 10
+
+    for i, text in enumerate(labels):
+        y = 20 + i * line_height
+        # Black shadow offset by 1 px
+        cv2.putText(img, text, (x + 1, y + 1), font, scale, (0, 0, 0), thickness, line_type)
+        # White foreground
+        cv2.putText(img, text, (x, y), font, scale, (255, 255, 255), thickness, line_type)
+
+    return img

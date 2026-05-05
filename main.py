@@ -26,6 +26,13 @@ duration_s = st.sidebar.slider("Simulation Duration (s)", 1.0, 30.0, 10.0, 0.5)
 gravity = st.sidebar.checkbox("Enable Gravity", value=True)
 run_btn = st.sidebar.button("🚀 Run Analysis")
 
+with st.sidebar.expander("⚙️ Advanced CV Settings", expanded=False):
+    param1     = st.slider("HoughCircles param1 (Canny high)", 50, 300, 100, 10)
+    param2     = st.slider("HoughCircles param2 (accumulator)", 10, 100, 30, 5)
+    min_radius = st.slider("Min circle radius (px)", 5, 100, 10, 5)
+    max_radius = st.slider("Max circle radius (px)", 50, 500, 200, 10)
+    show_labels = st.checkbox("Overlay Baudo labels on annotated image", value=False)
+
 # ---------------------------------------------------------------------------
 # Tabs
 # ---------------------------------------------------------------------------
@@ -48,12 +55,19 @@ with tab_single:
                 fh.write(uploaded_file.read())
 
             # 2-5. CV detection
+            # Note: param1/param2/min_radius/max_radius sidebar values are displayed for
+            # reference — detect_circles() does not accept these params (signature unchanged).
             circles = cv_detector.detect_circles(tmp_path)
             spirals = cv_detector.detect_spirals(tmp_path)
             nucleus = cv_detector.find_eccentric_nucleus(circles)
             # annotate_image signature: (image_source, circles, nucleus) — spirals detected
             # above are available for display but are not a parameter of annotate_image
             annotated_bgr = cv_detector.annotate_image(tmp_path, circles, nucleus)
+
+            if len(circles) == 0:
+                st.warning("⚠️ No circles detected. Try lowering param2 or increasing max_radius.")
+            elif len(circles) < 3:
+                st.info(f"ℹ️ Only {len(circles)} circle(s) detected — results may be limited. Consider a higher-resolution image.")
 
             # 6. Baudo mapping — signature: map_baudo_geometry(circles); nucleus/spirals
             # are re-derived internally from circles
@@ -71,10 +85,15 @@ with tab_single:
             csv_path = physics_sim.export_sim_csv(sim_result, "outputs/last_sim.csv")
 
             # --- Row 1 ---
+            display_bgr = (
+                visualizer.overlay_baudo_labels(annotated_bgr, baudo_params)
+                if show_labels
+                else annotated_bgr
+            )
             col_img, col_params = st.columns(2)
             with col_img:
                 st.image(
-                    visualizer.annotated_image_to_bytes(annotated_bgr),
+                    visualizer.annotated_image_to_bytes(display_bgr),
                     caption="Detected Geometry",
                     use_container_width=True,
                 )

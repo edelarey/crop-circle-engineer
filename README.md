@@ -153,6 +153,27 @@ Full pinned list: [`requirements.txt`](requirements.txt)
 
 ---
 
+## 3D Model Notes
+
+The exported `.glb` file includes the full Baudo rotor assembly (eccentric axle, rotor discs, counterweights). To view with camera orbit or animation:
+
+- **VSCode**: Install [glTF Tools](https://marketplace.visualstudio.com/items?itemName=kshetline.vscode-gltf) → right-click `.glb` → *Preview 3D Model*
+- **Web**: Drag & drop at [gltf-viewer.donmccurdy.com](https://gltf-viewer.donmccurdy.com) — supports orbit, zoom, lighting
+- **Blender**: File → Import → glTF 2.0 — add keyframe animation manually or via the NLA editor
+- **Future**: Keyframe animation (rotation + counterweight bob) is planned for a future release using trimesh scene animation export
+
+---
+
+## Running Tests
+
+```bash
+crop-circle-env/bin/python -m unittest tests.test_pipeline -v
+```
+
+Tests cover: `px_to_meters` utility, Baudo mapper smoke, physics simulation smoke, resonance curve, and CSV export.
+
+---
+
 ## 🔗 References
 
 - Umberto Baudo conference presentations and simulation videos (2008–2019)
