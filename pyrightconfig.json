@@ -1,0 +1,20 @@
+{
+    "venvPath": ".",
+    "venv": "crop-circle-env",
+    "pythonVersion": "3.12",
+    "pythonPlatform": "Linux",
+    "include": [
+        "modules",
+        "utils",
+        "tests",
+        "main.py",
+        "config.py"
+    ],
+    "exclude": [
+        "crop-circle-env",
+        "outputs",
+        "sample_images",
+        "**/__pycache__"
+    ],
+    "typeCheckingMode": "basic"
+}

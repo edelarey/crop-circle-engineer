@@ -1,117 +1,155 @@
-```markdown
-# Crop-Circle-Engineer
+# crop-circle-engineer
 
-**Reverse-engineer crop circles into working 3D energy-generating devices**  
-*Based on the principles of Italian inventor Umberto Baudo*
+**Reverse-engineer crop circle images into Baudo-principle 3D energy-generating devices**  
+*Computer vision · Physics simulation · 3D modelling*
 
-Turn any aerial photograph of a crop circle into a precise mechanical 3D model — complete with eccentric core, centrifugal rotors, spring-loaded counterweights, and animated physics — ready for rendering in Grok Imagine with orbiting camera views.
+> **Status:** All 6 phases complete ✅
 
 ---
 
 ## 🎯 Vision
 
-Crop circles are not random art. Following Umberto Baudo’s groundbreaking work (2008–2019), this application treats authentic formations as **technical blueprints** for free-energy devices powered by centrifugal force, eccentric nuclei, and oscillating spring systems.
+Crop circles are not random art. Following Umberto Baudo's groundbreaking work (2008–2019), this application treats authentic formations as **technical blueprints** for free-energy devices powered by centrifugal force, eccentric nuclei, and oscillating spring systems.
 
-Crop-Circle-Engineer automatically:
-- Detects every circle, spiral, and offset using computer vision
-- Maps geometry to Baudo’s mechanical components
-- Generates interactive 2D diagrams and physics-enabled 3D models
-- Exports GLB/GLTF files optimized for Grok Imagine cinematic animations
+**crop-circle-engineer** automatically:
+
+- Detects every circle, spiral, and offset nucleus using computer vision
+- Maps detected geometry to Baudo's mechanical components
+- Generates downloadable GLB 3D models
+- Runs physics simulations and exports time-series data
+- Presents everything in a drag-and-drop Streamlit web UI
 
 ---
 
 ## ✨ Features
 
-- **Automated Computer Vision** — OpenCV HoughCircles + spiral & eccentric-core detection
+- **Automated Computer Vision** — OpenCV `HoughCircles` + spiral & eccentric-core detection
 - **Baudo Principle Mapper** — Converts geometry into eccentric axle, rotor discs, spring constants, and counterweight masses
-- **Physics Simulation** — Centrifugal acceleration, core distortion, spring oscillation (SciPy / PyBullet)
-- **3D Model Export** — Full GLTF/GLB with embedded animations (perfect for Grok Imagine orbiting camera)
-- **Streamlit Web UI** — Drag-and-drop image upload → live preview → one-click export
-- **High Accuracy** — Preserves exact geometric ratios from the original crop circle
-- **Extensible** — Modular design for new device types and harvesting mechanisms
+- **Physics Simulation** — SciPy RK45 ODE solver for RPM vs time, kinetic energy, and resonance curves
+- **3D Model Export** — Full GLB (glTF 2.0) built with `trimesh`/`pygltflib`, ready to view or render
+- **Streamlit Web UI** — Single-image and batch-processing tabs; one-click CSV & GLB downloads
+- **Batch Processing** — Process multiple images in one run; per-image CSV and GLB outputs
 
 ---
 
-## 🛠️ Installation
+## 🛠️ Setup
+
+### Prerequisites
+
+- Python 3.12
+
+### Installation
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/YOUR-USERNAME/Crop-Circle-Engineer.git
-cd Crop-Circle-Engineer
+# 1. Create virtual environment
+python3.12 -m venv crop-circle-env
 
-# 2. Create virtual environment
-python -m venv venv
-# Windows:
-venv\Scripts\activate
-# macOS / Linux:
-source venv/bin/activate
+# 2. Install dependencies
+crop-circle-env/bin/pip install -r requirements.txt
 
-# 3. Install dependencies
-pip install -r requirements.txt
+# 3. Run the app
+crop-circle-env/bin/streamlit run main.py
 ```
 
-### Required Packages (requirements.txt)
-```txt
-opencv-python
-numpy
-scipy
-matplotlib
-streamlit
-pybullet
-trimesh
-pygltflib
-shapely
-scikit-image
-pillow
-plotly
-pythreejs
-```
+Open the local URL printed by Streamlit in your browser.
 
 ---
 
 ## 🚀 Quick Start
 
-```bash
-# Run the Streamlit web app
-streamlit run main.py
-```
-
-1. Open the local URL shown in terminal
-2. Upload any crop circle photo (high-resolution aerial preferred)
-3. Watch automatic detection → Baudo mapping → 3D model generation
-4. Download GLB file for Grok Imagine
+1. Run the app (see above).
+2. **Single Image tab** — Upload a JPEG or PNG aerial crop-circle photo.
+3. Watch automatic detection → Baudo mapping → 3D model generation → physics simulation.
+4. Download the `.glb` model or `.csv` simulation data.
+5. **Batch tab** — Upload multiple images; per-image outputs land in `outputs/`.
 
 ---
 
 ## 📁 Project Structure
 
 ```
-Crop-Circle-Engineer/
-├── main.py                 # Streamlit entry point
-├── config.py               # Baudo constants & tuning parameters
+crop-circle-engineer/
+├── main.py                   # Streamlit entry point (single image + batch tabs)
+├── config.py                 # Baudo constants & tuning parameters
+├── requirements.txt
 ├── modules/
-│   ├── cv_detector.py      # Phase 1: Circle & spiral detection
-│   ├── baudo_mapper.py     # Phase 2: Mechanical parameter extraction
-│   ├── model_3d.py         # Phase 3: 3D GLTF generation
-│   ├── physics_sim.py      # Phase 4: Centrifugal & spring simulation
-│   └── visualizer.py       # Phase 5: 2D/3D rendering
+│   ├── cv_detector.py        # OpenCV circle/spiral/nucleus detection
+│   ├── baudo_mapper.py       # Maps geometry → Baudo mechanical params
+│   ├── model_3d.py           # Builds GLB 3D model (trimesh/pygltflib)
+│   ├── physics_sim.py        # SciPy RK45 ODE physics simulation
+│   └── visualizer.py         # Plotly charts + Streamlit helpers
 ├── utils/
-│   ├── geometry.py
-│   └── exporters.py
-├── sample_images/          # Test crop circles (Milk Hill, Julia Set, etc.)
-├── outputs/                # Generated models & images
-└── SPEC.md                 # Full project specification
+│   ├── geometry.py           # px_to_meters, spiral-fit helpers
+│   └── exporters.py          # CSV/GLB export, batch export
+├── input_images/             # Sample crop-circle photos
+├── sample_images/            # Additional test images
+├── outputs/                  # Generated models & simulation data (git-kept empty)
+├── docs/
+│   └── specification.md      # Full project specification
+└── tests/
 ```
 
 ---
 
-## 📖 How It Works (Baudo Principles)
+## 📖 How It Works — Baudo Principles
+
+| Step | Module | What happens |
+|------|--------|-------------|
+| 1 | [`modules/cv_detector.py`](modules/cv_detector.py) | HoughCircles + spiral/nucleus detection on the uploaded image |
+| 2 | [`modules/baudo_mapper.py`](modules/baudo_mapper.py) | Detected geometry → eccentric axle, rotor discs, spring constants, counterweight masses |
+| 3 | [`modules/model_3d.py`](modules/model_3d.py) | Baudo params → GLB 3D model |
+| 4 | [`modules/physics_sim.py`](modules/physics_sim.py) | RK45 ODE simulation → RPM, kinetic energy, resonance |
+| 5 | [`modules/visualizer.py`](modules/visualizer.py) | Plotly charts rendered in Streamlit |
+| 6 | [`utils/exporters.py`](utils/exporters.py) | One-click CSV & GLB download |
+
+### Core Baudo concepts
 
 1. **Eccentric Core** — Offset central nucleus creates continuous imbalance
 2. **Centrifugal Force** — Primary energy source driving rotation
 3. **Spring-Loaded Counterweights** — Mobile masses on rotor plates store and release energy
 4. **Core Distortion** — Oval deformation under load produces self-acceleration
-5. **Output** — Visualized as rotating 3D energy generator with live physics
+
+---
+
+## 📦 Output Files
+
+| File | Description |
+|------|-------------|
+| `outputs/cropbaudo_output.glb` | 3D model from last single-image run |
+| `outputs/last_sim.csv` | Simulation time-series from last single-image run |
+| `outputs/<stem>_model.glb` | Per-image 3D model (batch mode) |
+| `outputs/<stem>_sim.csv` | Per-image simulation data (batch mode) |
+
+---
+
+## 🔍 Viewing GLB Output
+
+| Tool | How |
+|------|-----|
+| **VSCode** | Install [glTF Tools](https://marketplace.visualstudio.com/items?itemName=kshetline.vscode-gltf) (`kshetline.vscode-gltf`), right-click `.glb` → *Preview 3D Model* |
+| **Browser** | Drag & drop at [gltf-viewer.donmccurdy.com](https://gltf-viewer.donmccurdy.com) |
+| **Blender** | *File → Import → glTF 2.0* |
+
+---
+
+## 📦 Key Dependencies
+
+| Package | Purpose |
+|---------|---------|
+| `opencv-python` | Circle/spiral detection |
+| `numpy` | Numerical arrays |
+| `scipy` | RK45 ODE solver |
+| `streamlit` | Web UI |
+| `pybullet` | Rigid-body physics |
+| `trimesh` | 3D mesh construction |
+| `pygltflib` | GLB/glTF serialisation |
+| `shapely` | 2D geometry operations |
+| `scikit-image` | Image processing helpers |
+| `plotly` | Interactive charts |
+| `pythreejs` | Three.js bindings |
+| `pillow` | Image I/O |
+
+Full pinned list: [`requirements.txt`](requirements.txt)
 
 ---
 
@@ -119,42 +157,13 @@ Crop-Circle-Engineer/
 
 - Umberto Baudo conference presentations and simulation videos (2008–2019)
 - Crop circle photography from Wiltshire archives
-- Grok Imagine — for cinematic 3D orbiting renders
-
----
-
-## 🛣️ Roadmap
-
-- [x] Phase 1: CV Detector
-- [ ] Phase 2: Baudo Mapper
-- [ ] Phase 3: 3D GLTF Generator
-- [ ] Phase 4: Physics Simulation
-- [ ] Phase 5: Polished Streamlit UI
-- [ ] Batch processing & plugin system
-- [ ] Piezoelectric energy harvesting module
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! Whether you're a computer vision expert, 3D modeler, or Baudo researcher — feel free to open issues or pull requests.
-
-1. Fork the repo
-2. Create a feature branch
-3. Submit PR with clear description
 
 ---
 
 ## 📄 License
 
-MIT License — feel free to use, modify, and build upon this project.
+MIT License — see [`LICENSE`](LICENSE) for details.
 
 ---
 
-**“From crop circle to working energy device — one geometry at a time.”**
-
-Made with curiosity and the spirit of discovery.  
-Let's decode the blueprints together.
-
-
-
+**"From crop circle to working energy device — one geometry at a time."**

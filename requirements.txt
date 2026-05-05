@@ -1,0 +1,13 @@
+opencv-python
+numpy
+scipy
+matplotlib
+streamlit
+pybullet
+trimesh
+pygltflib
+shapely
+scikit-image
+plotly
+pythreejs
+pillow
