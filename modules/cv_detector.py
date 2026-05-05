@@ -22,8 +22,16 @@ from config import (
     HOUGH_PARAM2,
     TARGET_HEIGHT,
     TARGET_WIDTH,
+    CV_HOUGH_DP,
+    CV_HOUGH_PARAM1,
+    CV_HOUGH_PARAM2,
+    CV_CLAHE_CLIP_LIMIT,
+    CV_MORPH_CLOSE_KERNEL,
+    CV_FORMATION_MIN_AREA_FRACTION,
+    CV_MAX_CIRCLES,
+    CV_MAX_SPIRAL_CONTOURS,
 )
-from utils.geometry import fit_logarithmic_spiral
+from utils.geometry import fit_logarithmic_spiral, px_to_meters
 
 # ---------------------------------------------------------------------------
 # Public type aliases
@@ -43,7 +51,7 @@ ImageSource = Union[str, Path, IO[bytes]]
 def detect_circles(image_source: ImageSource) -> List[Circle]:
     """
     Load an image from a file path or file-like object, resize it,
-    apply GaussianBlur + HoughCircles, and return a sorted list of
+    apply preprocessing + HoughCircles, and return a sorted list of
     (x, y, r) tuples (ascending by radius).
 
     Baudo principle: sub-pixel accuracy is preserved by using the full-resolution
@@ -63,19 +71,21 @@ def detect_circles(image_source: ImageSource) -> List[Circle]:
     """
     img = _load_image(image_source)
     img = _resize(img)
+    h, w = img.shape[:2]
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (9, 9), 2)
+
+    enhanced_gray, formation_mask, edges = _preprocess_for_detection(gray)
 
     try:
         raw = cv2.HoughCircles(
-            blurred,
+            enhanced_gray,
             cv2.HOUGH_GRADIENT,
-            dp=HOUGH_DP,
-            minDist=HOUGH_MIN_DIST,
-            param1=HOUGH_PARAM1,
-            param2=HOUGH_PARAM2,
-            minRadius=HOUGH_MIN_RADIUS,
-            maxRadius=HOUGH_MAX_RADIUS,
+            dp=CV_HOUGH_DP,
+            minDist=max(30, min(h, w) // 20),
+            param1=CV_HOUGH_PARAM1,
+            param2=CV_HOUGH_PARAM2,
+            minRadius=max(10, min(h, w) // 50),
+            maxRadius=min(h, w) // 3,
         )
     except cv2.error as e:
         raise RuntimeError(f"HoughCircles failed: {e}") from e
@@ -83,17 +93,28 @@ def detect_circles(image_source: ImageSource) -> List[Circle]:
     if raw is None:
         return []
 
-    circles: List[Circle] = [
-        (float(x), float(y), float(r))
-        for x, y, r in np.round(raw[0]).astype(int)
-    ]
-    return sorted(circles, key=lambda c: c[2])  # ascending radius
+    # Filter: keep only circles whose centre lies within the formation mask
+    circles: List[dict] = []
+    for x, y, r in np.round(raw[0]).astype(int):
+        cx_i = int(np.clip(x, 0, w - 1))
+        cy_i = int(np.clip(y, 0, h - 1))
+        if formation_mask[cy_i, cx_i] > 0:
+            circles.append({
+                "cx": float(x),
+                "cy": float(y),
+                "radius_px": float(r),
+                "radius_m": px_to_meters(float(r)),
+            })
+
+    # Cap to CV_MAX_CIRCLES sorted by radius descending, then return ascending
+    circles = sorted(circles, key=lambda c: c["radius_px"], reverse=True)[:CV_MAX_CIRCLES]
+    return sorted(circles, key=lambda c: c["radius_px"])  # ascending radius
 
 
 def detect_spirals(image_source: ImageSource) -> List[SpiralCoeffs]:
     """
-    Detect logarithmic spiral arms in a crop-circle image using Canny edge
-    detection and contour fitting.
+    Detect logarithmic spiral arms in a crop-circle image using preprocessed
+    Canny edges and contour fitting.
 
     Baudo principle: spiral arms in genuine crop circles trace logarithmic
     growth curves that match the rotor-arm geometry of Baudo's mechanical
@@ -113,23 +134,40 @@ def detect_spirals(image_source: ImageSource) -> List[SpiralCoeffs]:
     """
     img = _load_image(image_source)
     img = _resize(img)
+    h, w = img.shape[:2]
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (5, 5), 1)
 
-    # Canny edge map
-    edges = cv2.Canny(blurred, threshold1=50, threshold2=150)
+    enhanced_gray, formation_mask, edges = _preprocess_for_detection(gray)
 
-    # Retrieve external contours only
+    # Retrieve external contours from preprocessed edges
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
-    h, w = img.shape[:2]
     cx, cy = w / 2.0, h / 2.0
     min_points = 30          # minimum contour length to consider
     min_arc_span = np.pi     # contour must span ≥ 180° around image centre
+    min_perimeter = min(h, w) * 0.05  # filter out tiny noise contours
+
+    # Pre-filter: perimeter threshold AND centre within formation mask region
+    filtered_contours = []
+    for contour in contours:
+        perimeter = cv2.arcLength(contour, closed=False)
+        if perimeter < min_perimeter:
+            continue
+        # Check bounding box centre falls within formation mask
+        bx, by, bw_box, bh_box = cv2.boundingRect(contour)
+        box_cx = int(np.clip(bx + bw_box // 2, 0, w - 1))
+        box_cy = int(np.clip(by + bh_box // 2, 0, h - 1))
+        if formation_mask[box_cy, box_cx] == 0:
+            continue
+        filtered_contours.append((perimeter, contour))
+
+    # Cap contours to bound spiral-fit runtime
+    filtered_contours.sort(key=lambda t: t[0], reverse=True)
+    top_contours = [c for _, c in filtered_contours[:CV_MAX_SPIRAL_CONTOURS]]
 
     coeffs: List[SpiralCoeffs] = []
 
-    for contour in contours:
+    for contour in top_contours:
         if len(contour) < min_points:
             continue
 
@@ -196,7 +234,11 @@ def find_eccentric_nucleus(circles: List[Circle]) -> Optional[Circle]:
     if len(circles) < 2:
         return None
 
-    arr = np.array(circles, dtype=float)  # shape (N, 3)
+    # Support both tuple (x, y, r) and dict {"cx", "cy", "radius_px"} circles
+    if isinstance(circles[0], dict):
+        arr = np.array([[c["cx"], c["cy"], c["radius_px"]] for c in circles], dtype=float)
+    else:
+        arr = np.array(circles, dtype=float)  # shape (N, 3)
     xs, ys, rs = arr[:, 0], arr[:, 1], arr[:, 2]
 
     # Weighted centroid – larger circles contribute more to the centre of mass
@@ -214,6 +256,8 @@ def find_eccentric_nucleus(circles: List[Circle]) -> Optional[Circle]:
     scores = norm_off - norm_r
     best_idx = int(np.argmax(scores))
 
+    if isinstance(circles[0], dict):
+        return circles[best_idx]  # type: ignore[return-value]
     return (float(xs[best_idx]), float(ys[best_idx]), float(rs[best_idx]))
 
 
@@ -254,13 +298,20 @@ def annotate_image(
     thickness = 2
     centre_radius = 3
 
-    for x, y, r in circles:
+    for circle in circles:
+        if isinstance(circle, dict):
+            x, y, r = circle["cx"], circle["cy"], circle["radius_px"]
+        else:
+            x, y, r = circle
         ix, iy, ir = int(round(x)), int(round(y)), int(round(r))
         cv2.circle(annotated, (ix, iy), ir, GREEN, thickness)
         cv2.circle(annotated, (ix, iy), centre_radius, GREEN, -1)
 
     if nucleus is not None:
-        nx, ny, nr = int(round(nucleus[0])), int(round(nucleus[1])), int(round(nucleus[2]))
+        if isinstance(nucleus, dict):
+            nx, ny, nr = int(round(nucleus["cx"])), int(round(nucleus["cy"])), int(round(nucleus["radius_px"]))
+        else:
+            nx, ny, nr = int(round(nucleus[0])), int(round(nucleus[1])), int(round(nucleus[2]))
         cv2.circle(annotated, (nx, ny), nr, RED, thickness + 1)
         cv2.circle(annotated, (nx, ny), centre_radius + 1, RED, -1)
         # Label the nucleus
@@ -281,6 +332,73 @@ def annotate_image(
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+def _preprocess_for_detection(gray: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Preprocess a grayscale image for robust circle and spiral detection.
+
+    Applies CLAHE contrast enhancement, bilateral + Gaussian filtering,
+    morphological closing, adaptive thresholding, and formation-region
+    extraction to eliminate field texture noise before detection.
+
+    Parameters
+    ----------
+    gray:
+        Single-channel grayscale image (uint8).
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray, np.ndarray]
+        ``(enhanced_gray, binary_mask, edges)`` where:
+        - ``enhanced_gray`` is the CLAHE-enhanced image for HoughCircles,
+        - ``binary_mask`` is the clean formation binary mask,
+        - ``edges`` is Canny edges masked to the formation region.
+    """
+    h, w = gray.shape[:2]
+    image_area = h * w
+
+    # 1. CLAHE contrast enhancement
+    clahe = cv2.createCLAHE(clipLimit=CV_CLAHE_CLIP_LIMIT, tileGridSize=(8, 8)).apply(gray)
+
+    # 2. Bilateral filter – reduces noise while preserving edges
+    bilateral = cv2.bilateralFilter(clahe, d=5, sigmaColor=50, sigmaSpace=50)
+
+    # 3. Gaussian blur for smoothing
+    blurred = cv2.GaussianBlur(bilateral, (5, 5), 0)
+
+    # 4. Morphological closing – connects flattened crop areas
+    kernel = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (CV_MORPH_CLOSE_KERNEL, CV_MORPH_CLOSE_KERNEL)
+    )
+    closed = cv2.morphologyEx(blurred, cv2.MORPH_CLOSE, kernel)
+
+    # 5. Adaptive threshold → clean binary mask
+    binary_mask = cv2.adaptiveThreshold(
+        closed, 255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY_INV,
+        blockSize=31,
+        C=5,
+    )
+
+    # 6. Keep only large contours (formation region); discard field noise
+    contours, _ = cv2.findContours(binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    min_area = image_area * CV_FORMATION_MIN_AREA_FRACTION
+    large_contours = [c for c in contours if cv2.contourArea(c) > min_area]
+
+    formation_mask = np.zeros_like(binary_mask)
+    if large_contours:
+        cv2.drawContours(formation_mask, large_contours, -1, 255, -1)
+
+    binary_mask = cv2.bitwise_and(binary_mask, formation_mask)
+
+    # 7. Canny edges on enhanced gray, masked to formation region
+    masked_blurred = cv2.bitwise_and(blurred, blurred, mask=formation_mask)
+    edges = cv2.Canny(masked_blurred, 50, 150)
+
+    # 8. Return enhanced_gray (CLAHE output), binary_mask, edges
+    return clahe, binary_mask, edges
+
 
 def _load_image(source: ImageSource) -> np.ndarray:
     """

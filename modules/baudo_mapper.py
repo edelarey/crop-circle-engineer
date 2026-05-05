@@ -39,10 +39,16 @@ def map_baudo_geometry(circles: List[Circle]) -> Dict[str, Any]:
     if not circles:
         return {}
 
-    centroid = _image_centroid(circles)
-    nucleus = _find_eccentric_nucleus(circles, centroid)
-    rotor_circles = _assign_rotor_discs(circles, nucleus)
-    counterweight_circles = _assign_counterweights(circles, nucleus)
+    # Normalise: accept both tuple (x,y,r) and dict {"cx","cy","radius_px",...}
+    def _to_tuple(c: Any) -> Circle:
+        if isinstance(c, dict):
+            return (c["cx"], c["cy"], c["radius_px"])
+        return c
+
+    norm_circles: List[Circle] = [_to_tuple(c) for c in circles]
+
+    centroid = _image_centroid(norm_circles)
+    nucleus = _find_eccentric_nucleus(norm_circles, centroid)
 
     eccentric_offset_px = _distance(nucleus[:2], centroid)
     eccentric_offset_m = px_to_meters(eccentric_offset_px)
@@ -51,10 +57,10 @@ def map_baudo_geometry(circles: List[Circle]) -> Dict[str, Any]:
     omega = BASE_RPM * 2.0 * math.pi / 60.0  # rad/s
 
     # Build rotor disc list with layer_index
-    rotor_discs: List[Dict[str, Any]] = assign_rotor_discs(circles, nucleus)
+    rotor_discs: List[Dict[str, Any]] = assign_rotor_discs(norm_circles, nucleus)
 
     # Build counterweight list with mass, spring_k, natural_freq
-    counterweights: List[Dict[str, Any]] = assign_counterweights(circles, nucleus)
+    counterweights: List[Dict[str, Any]] = assign_counterweights(norm_circles, nucleus)
 
     # Rotational KE: I = sum(mass * r_m^2), E = 0.5 * I * omega^2
     total_inertia = sum(
@@ -62,6 +68,8 @@ def map_baudo_geometry(circles: List[Circle]) -> Dict[str, Any]:
         for cw in counterweights
     )
     predicted_energy_j = 0.5 * total_inertia * omega ** 2
+
+    nat_freq = compute_natural_frequency(spring_k, sum(cw.get("mass_kg", 0.5) for cw in counterweights))
 
     return {
         "centroid": centroid,
@@ -77,6 +85,7 @@ def map_baudo_geometry(circles: List[Circle]) -> Dict[str, Any]:
         "base_rpm": BASE_RPM,
         "spring_k": spring_k,
         "predicted_energy_J": predicted_energy_j,
+        "natural_frequency_hz": nat_freq,
     }
 
 

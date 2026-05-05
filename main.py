@@ -27,8 +27,8 @@ gravity = st.sidebar.checkbox("Enable Gravity", value=True)
 run_btn = st.sidebar.button("🚀 Run Analysis")
 
 with st.sidebar.expander("⚙️ Advanced CV Settings", expanded=False):
-    param1     = st.slider("HoughCircles param1 (Canny high)", 50, 300, 100, 10)
-    param2     = st.slider("HoughCircles param2 (accumulator)", 10, 100, 30, 5)
+    param1     = st.slider("HoughCircles param1 (Canny high)", 50, 300, 80, 10)
+    param2     = st.slider("HoughCircles param2 (accumulator)", 10, 100, 35, 5)
     min_radius = st.slider("Min circle radius (px)", 5, 100, 10, 5)
     max_radius = st.slider("Max circle radius (px)", 50, 500, 200, 10)
     show_labels = st.checkbox("Overlay Baudo labels on annotated image", value=False)

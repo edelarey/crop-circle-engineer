@@ -29,3 +29,13 @@ GLB_FILENAME = "cropbaudo_output.glb"
 # --- Physics simulation ---
 SIM_DURATION_S = 10.0   # seconds
 SIM_TIMESTEP_S = 0.01   # seconds
+
+# CV Detection defaults
+CV_HOUGH_DP = 2.0           # Larger = faster accumulator (4× speedup vs 1.2)
+CV_HOUGH_PARAM1 = 80
+CV_HOUGH_PARAM2 = 35
+CV_CLAHE_CLIP_LIMIT = 2.0
+CV_MORPH_CLOSE_KERNEL = 15
+CV_FORMATION_MIN_AREA_FRACTION = 0.005  # min contour area as fraction of image
+CV_MAX_CIRCLES = 50
+CV_MAX_SPIRAL_CONTOURS = 20
