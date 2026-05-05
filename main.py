@@ -95,7 +95,7 @@ with tab_single:
                 st.image(
                     visualizer.annotated_image_to_bytes(display_bgr),
                     caption="Detected Geometry",
-                    use_container_width=True,
+                    width='stretch',
                 )
             with col_params:
                 st.subheader("Baudo Parameters")
@@ -105,15 +105,15 @@ with tab_single:
             col_rpm, col_energy, col_res = st.columns(3)
             with col_rpm:
                 st.plotly_chart(
-                    visualizer.plot_rpm_curve(sim_result), use_container_width=True
+                    visualizer.plot_rpm_curve(sim_result), width='stretch'
                 )
             with col_energy:
                 st.plotly_chart(
-                    visualizer.plot_energy_curve(sim_result), use_container_width=True
+                    visualizer.plot_energy_curve(sim_result), width='stretch'
                 )
             with col_res:
                 st.plotly_chart(
-                    visualizer.plot_resonance_curve(resonance), use_container_width=True
+                    visualizer.plot_resonance_curve(resonance), width='stretch'
                 )
 
             # --- Row 3: metrics ---
@@ -186,7 +186,7 @@ with tab_batch:
                 with st.expander(f.name):
                     st.plotly_chart(
                         visualizer.plot_rpm_curve(result["sim_result"]),
-                        use_container_width=True,
+                        width='stretch',
                     )
                     st.metric("Peak RPM", f"{result['sim_result']['peak_rpm']:.1f}")
 
