@@ -13,6 +13,7 @@ from typing import IO, List, Optional, Tuple, Union
 import cv2
 import numpy as np
 
+import config as _cfg
 from config import (
     HOUGH_DP,
     HOUGH_MAX_RADIUS,
@@ -22,14 +23,6 @@ from config import (
     HOUGH_PARAM2,
     TARGET_HEIGHT,
     TARGET_WIDTH,
-    CV_HOUGH_DP,
-    CV_HOUGH_PARAM1,
-    CV_HOUGH_PARAM2,
-    CV_CLAHE_CLIP_LIMIT,
-    CV_MORPH_CLOSE_KERNEL,
-    CV_FORMATION_MIN_AREA_FRACTION,
-    CV_MAX_CIRCLES,
-    CV_MAX_SPIRAL_CONTOURS,
 )
 from utils.geometry import fit_logarithmic_spiral, px_to_meters
 
@@ -76,16 +69,23 @@ def detect_circles(image_source: ImageSource) -> List[Circle]:
 
     enhanced_gray, formation_mask, edges = _preprocess_for_detection(gray)
 
+    dp = _cfg.CV_HOUGH_DP
+    min_dist = max(20, min(h, w) // _cfg.CV_HOUGH_MIN_DIST_DIVISOR)
+    param1 = _cfg.CV_HOUGH_PARAM1
+    param2 = _cfg.CV_HOUGH_PARAM2
+    min_radius = max(8, min(h, w) // _cfg.CV_HOUGH_MIN_RADIUS_DIVISOR)
+    max_radius = int(min(h, w) * _cfg.CV_HOUGH_MAX_RADIUS_FRACTION)
+
     try:
         raw = cv2.HoughCircles(
             enhanced_gray,
             cv2.HOUGH_GRADIENT,
-            dp=CV_HOUGH_DP,
-            minDist=max(30, min(h, w) // 20),
-            param1=CV_HOUGH_PARAM1,
-            param2=CV_HOUGH_PARAM2,
-            minRadius=max(10, min(h, w) // 50),
-            maxRadius=min(h, w) // 3,
+            dp=dp,
+            minDist=min_dist,
+            param1=param1,
+            param2=param2,
+            minRadius=min_radius,
+            maxRadius=max_radius,
         )
     except cv2.error as e:
         raise RuntimeError(f"HoughCircles failed: {e}") from e
@@ -106,9 +106,22 @@ def detect_circles(image_source: ImageSource) -> List[Circle]:
                 "radius_m": px_to_meters(float(r)),
             })
 
+    # Deduplication: remove near-duplicate circles (same centre + similar radius)
+    deduped: List[dict] = []
+    for c in sorted(circles, key=lambda c: c["radius_px"], reverse=True):
+        is_dup = False
+        for kept in deduped:
+            dist = np.hypot(c["cx"] - kept["cx"], c["cy"] - kept["cy"])
+            r_min = min(c["radius_px"], kept["radius_px"])
+            if dist < min_dist / 2 and abs(c["radius_px"] - kept["radius_px"]) < r_min * 0.15:
+                is_dup = True
+                break
+        if not is_dup:
+            deduped.append(c)
+
     # Cap to CV_MAX_CIRCLES sorted by radius descending, then return ascending
-    circles = sorted(circles, key=lambda c: c["radius_px"], reverse=True)[:CV_MAX_CIRCLES]
-    return sorted(circles, key=lambda c: c["radius_px"])  # ascending radius
+    deduped = sorted(deduped, key=lambda c: c["radius_px"], reverse=True)[:_cfg.CV_MAX_CIRCLES]
+    return sorted(deduped, key=lambda c: c["radius_px"])  # ascending radius
 
 
 def detect_spirals(image_source: ImageSource) -> List[SpiralCoeffs]:
@@ -163,7 +176,7 @@ def detect_spirals(image_source: ImageSource) -> List[SpiralCoeffs]:
 
     # Cap contours to bound spiral-fit runtime
     filtered_contours.sort(key=lambda t: t[0], reverse=True)
-    top_contours = [c for _, c in filtered_contours[:CV_MAX_SPIRAL_CONTOURS]]
+    top_contours = [c for _, c in filtered_contours[:_cfg.CV_MAX_SPIRAL_CONTOURS]]
 
     coeffs: List[SpiralCoeffs] = []
 
@@ -358,7 +371,7 @@ def _preprocess_for_detection(gray: np.ndarray) -> tuple[np.ndarray, np.ndarray,
     image_area = h * w
 
     # 1. CLAHE contrast enhancement
-    clahe = cv2.createCLAHE(clipLimit=CV_CLAHE_CLIP_LIMIT, tileGridSize=(8, 8)).apply(gray)
+    clahe = cv2.createCLAHE(clipLimit=_cfg.CV_CLAHE_CLIP_LIMIT, tileGridSize=(8, 8)).apply(gray)
 
     # 2. Bilateral filter – reduces noise while preserving edges
     bilateral = cv2.bilateralFilter(clahe, d=5, sigmaColor=50, sigmaSpace=50)
@@ -366,24 +379,32 @@ def _preprocess_for_detection(gray: np.ndarray) -> tuple[np.ndarray, np.ndarray,
     # 3. Gaussian blur for smoothing
     blurred = cv2.GaussianBlur(bilateral, (5, 5), 0)
 
-    # 4. Morphological closing – connects flattened crop areas
-    kernel = cv2.getStructuringElement(
-        cv2.MORPH_ELLIPSE, (CV_MORPH_CLOSE_KERNEL, CV_MORPH_CLOSE_KERNEL)
+    # 4. Multi-kernel morphological closing — preserves thin ring structure
+    # First pass: small 5×5 ellipse — connects thin flattened ring edges
+    kernel_small = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    closed = cv2.morphologyEx(blurred, cv2.MORPH_CLOSE, kernel_small)
+    # Second pass: larger kernel — fills ring interiors
+    kernel_large = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (_cfg.CV_MORPH_CLOSE_KERNEL, _cfg.CV_MORPH_CLOSE_KERNEL)
     )
-    closed = cv2.morphologyEx(blurred, cv2.MORPH_CLOSE, kernel)
+    closed = cv2.morphologyEx(closed, cv2.MORPH_CLOSE, kernel_large)
 
-    # 5. Adaptive threshold → clean binary mask
+    # 5. Adaptive threshold → clean binary mask (finer detail: blockSize=21, C=3)
     binary_mask = cv2.adaptiveThreshold(
         closed, 255,
         cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
         cv2.THRESH_BINARY_INV,
-        blockSize=31,
-        C=5,
+        blockSize=21,
+        C=3,
     )
+
+    # 5b. Opening pass — remove speckle noise before formation mask step
+    kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    binary_mask = cv2.morphologyEx(binary_mask, cv2.MORPH_OPEN, kernel_open)
 
     # 6. Keep only large contours (formation region); discard field noise
     contours, _ = cv2.findContours(binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    min_area = image_area * CV_FORMATION_MIN_AREA_FRACTION
+    min_area = image_area * _cfg.CV_FORMATION_MIN_AREA_FRACTION
     large_contours = [c for c in contours if cv2.contourArea(c) > min_area]
 
     formation_mask = np.zeros_like(binary_mask)
@@ -393,8 +414,9 @@ def _preprocess_for_detection(gray: np.ndarray) -> tuple[np.ndarray, np.ndarray,
     binary_mask = cv2.bitwise_and(binary_mask, formation_mask)
 
     # 7. Canny edges on enhanced gray, masked to formation region
+    # Lower thresholds (30, 100) — more sensitive to faint ring edges
     masked_blurred = cv2.bitwise_and(blurred, blurred, mask=formation_mask)
-    edges = cv2.Canny(masked_blurred, 50, 150)
+    edges = cv2.Canny(masked_blurred, 30, 100)
 
     # 8. Return enhanced_gray (CLAHE output), binary_mask, edges
     return clahe, binary_mask, edges
@@ -432,15 +454,17 @@ def _load_image(source: ImageSource) -> np.ndarray:
 
 def _resize(img: np.ndarray) -> np.ndarray:
     """
-    Upscale ``img`` so that both dimensions are at least
-    ``TARGET_WIDTH × TARGET_HEIGHT``, preserving aspect ratio.
+    Scale ``img`` so that both dimensions fit within ``TARGET_WIDTH × TARGET_HEIGHT``,
+    preserving aspect ratio. Upscales if smaller, downscales if larger.
 
-    Baudo principle: a minimum resolution of 1280 × 720 is required to resolve
-    the fine-pitch concentric rings that correspond to thin rotor discs.
+    Baudo principle: a working resolution of 1280 × 720 is required to resolve
+    the fine-pitch concentric rings that correspond to thin rotor discs, while
+    capping large images prevents HoughCircles from running for minutes.
     """
     h, w = img.shape[:2]
-    scale = max(TARGET_WIDTH / w, TARGET_HEIGHT / h)
-    if scale > 1.0:
+    scale = min(TARGET_WIDTH / w, TARGET_HEIGHT / h)
+    if abs(scale - 1.0) > 0.01:
         new_w, new_h = int(w * scale), int(h * scale)
-        img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
+        interp = cv2.INTER_CUBIC if scale > 1.0 else cv2.INTER_AREA
+        img = cv2.resize(img, (new_w, new_h), interpolation=interp)
     return img

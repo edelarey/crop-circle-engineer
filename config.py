@@ -30,12 +30,15 @@ GLB_FILENAME = "cropbaudo_output.glb"
 SIM_DURATION_S = 10.0   # seconds
 SIM_TIMESTEP_S = 0.01   # seconds
 
-# CV Detection defaults
-CV_HOUGH_DP = 2.0           # Larger = faster accumulator (4× speedup vs 1.2)
-CV_HOUGH_PARAM1 = 80
-CV_HOUGH_PARAM2 = 35
-CV_CLAHE_CLIP_LIMIT = 2.0
-CV_MORPH_CLOSE_KERNEL = 15
-CV_FORMATION_MIN_AREA_FRACTION = 0.005  # min contour area as fraction of image
-CV_MAX_CIRCLES = 50
-CV_MAX_SPIRAL_CONTOURS = 20
+# CV Detection — tuned for Wiltshire crop circle formations
+CV_HOUGH_DP = 1.0            # finer accumulator for more detections
+CV_HOUGH_PARAM1 = 60         # lower Canny high threshold = more edges
+CV_HOUGH_PARAM2 = 15         # lower accumulator threshold = more circles detected
+CV_CLAHE_CLIP_LIMIT = 3.0    # stronger contrast enhancement
+CV_MORPH_CLOSE_KERNEL = 11   # slightly smaller to preserve thin ring structure
+CV_FORMATION_MIN_AREA_FRACTION = 0.002   # allow smaller formation segments
+CV_MAX_CIRCLES = 60          # cap at 60 (generous but bounded)
+CV_MAX_SPIRAL_CONTOURS = 30  # unchanged
+CV_HOUGH_MIN_DIST_DIVISOR = 15   # image_dim // 15 for minDist
+CV_HOUGH_MIN_RADIUS_DIVISOR = 60  # image_dim // 60 for minRadius
+CV_HOUGH_MAX_RADIUS_FRACTION = 0.30  # tightened — speeds up accumulator, still covers all rings
